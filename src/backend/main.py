@@ -43,5 +43,5 @@ def main():
     response = processor.batch_decode(outputs, skip_special_tokens=True)[0]
     print(response)
 if __name__ == "__main__":
-    torch.cuda.empty_cache()
+    #qtorch.cuda.empty_cache()
     main()
