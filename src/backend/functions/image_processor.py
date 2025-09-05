@@ -3,7 +3,7 @@ import torch
 import logging
 from typing import List, Optional, Any
 from dataclasses import dataclass, field
-from .folders import inference_on_images
+from folders import inference_on_images, get_list_images, path_folder_env
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -205,3 +205,8 @@ class ImageProcessor:
         """Clear GPU cache to free memory"""
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+if __name__ == "__main__":
+    image_processor: ImageProcessor = ImageProcessor()
+    folder_test: List[str] = get_list_images(str(path_folder_env), "jpg")
+    image_processor.process_images_batch(folder_test)
