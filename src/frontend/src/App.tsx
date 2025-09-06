@@ -1,34 +1,37 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import ImageUploader from './components/ImageUploader'
+import FolderProcessor from './components/FolderProcessor'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [activeTab, setActiveTab] = useState<'upload' | 'folder'>('upload')
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
+    <div className="app">
+      <header className="app-header">
+        <h1>Image Processing AI</h1>
+        <p>Upload images or process folders with AI vision models</p>
+      </header>
+
+      <nav className="tab-nav">
+        <button 
+          className={`tab-button ${activeTab === 'upload' ? 'active' : ''}`}
+          onClick={() => setActiveTab('upload')}
+        >
+          Upload Image
         </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+        <button 
+          className={`tab-button ${activeTab === 'folder' ? 'active' : ''}`}
+          onClick={() => setActiveTab('folder')}
+        >
+          Process Folder
+        </button>
+      </nav>
+
+      <main className="app-main">
+        {activeTab === 'upload' ? <ImageUploader /> : <FolderProcessor />}
+      </main>
+    </div>
   )
 }
 
