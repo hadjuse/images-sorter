@@ -144,11 +144,11 @@ const ImageUploader = () => {
         <div className="result-section">
           <h3>Analysis Result</h3>
           <div className="result-content">
-            <p className="description">{result.description}</p>
             <div className="result-meta">
               <span>File: {result.filename}</span>
               <span>Status: {result.status}</span>
             </div>
+            <p className="description">{result.description}</p>
           </div>
         </div>
       )}
