@@ -6,6 +6,21 @@ Script to start the Image Processing API
 import uvicorn
 import os
 import sys
+import logging
+
+# Configure detailed logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# Set specific loggers to INFO level for detailed inference tracking
+logging.getLogger('functions.folders').setLevel(logging.INFO)
+logging.getLogger('functions.image_processor').setLevel(logging.INFO)
+logging.getLogger('api.api').setLevel(logging.INFO)
 
 # Add backend path to PYTHONPATH
 backend_path = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +35,7 @@ def main():
     
     uvicorn.run(
         "api.api:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=8000,
         reload=True,  # Auto-reload in development
         log_level="info"
