@@ -9,7 +9,11 @@ import sys
 import tempfile
 import uuid
 import shutil
+import logging
 from urllib.parse import unquote
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Add functions folder to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'functions'))
@@ -54,7 +58,9 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        # Allow any origin for development (can restrict later)
+        "*"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -68,8 +74,13 @@ class FolderRequest(BaseModel):
 
 @app.get("/")
 async def root():
-    """Health check endpoint"""
+    """Root endpoint"""
     return {"message": "Image Processing API is running"}
+
+@app.get("/health")
+async def health():
+    """Health check endpoint for Docker"""
+    return {"status": "healthy"}
 
 @app.post("/process/image")
 async def process_single_image(file: UploadFile = File(...)):
@@ -77,9 +88,13 @@ async def process_single_image(file: UploadFile = File(...)):
     if image_processor is None:
         raise HTTPException(status_code=503, detail="Image processor not initialized")
     
+    # Log file details for debugging
+    logger.info(f"Received file: filename={file.filename}, content_type={file.content_type}")
+    
     # Check file type
     if not file.content_type or not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File must be an image")
+        logger.error(f"Invalid content type: {file.content_type} for file {file.filename}")
+        raise HTTPException(status_code=400, detail=f"File must be an image (received: {file.content_type})")
     
     # Create temporary file
     temp_dir = None
@@ -94,13 +109,28 @@ async def process_single_image(file: UploadFile = File(...)):
         temp_filename = f"{uuid.uuid4()}{file_extension}"
         temp_file_path = os.path.join(temp_dir, temp_filename)
         
+        logger.info(f"Processing uploaded file: {file.filename} (size: {file.size if hasattr(file, 'size') else 'unknown'} bytes)")
+        logger.info(f"Temporary file path: {temp_file_path}")
+        
         # Save uploaded file
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
+        logger.info("File saved successfully, starting inference...")
+        
         # Process the image
         model, processor = image_processor._ensure_models_loaded()
-        response = inference_on_images(temp_file_path, processor, model)
+        response = inference_on_images(temp_file_path, image_processor.tokenizer, model)
+        
+        logger.info(f"Inference completed for {file.filename}")
+        
+        # Cleanup
+        try:
+            os.remove(temp_file_path)
+            os.rmdir(temp_dir)
+            logger.debug(f"Cleaned up temporary files: {temp_file_path}")
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to cleanup temporary files: {cleanup_error}")
         
         return {
             "filename": file.filename,
@@ -158,7 +188,7 @@ async def process_folder(request: FolderRequest):
         
         for i, image_path in enumerate(images_to_process):
             try:
-                response = inference_on_images(image_path, processor, model)
+                response = inference_on_images(image_path, image_processor.tokenizer, model)
                 results.append({
                     "image_path": image_path,
                     "status": "success", 

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import './ImageUploader.css'
+import { API_BASE_URL } from '../config/api'
 
 interface ProcessingResult {
   filename: string
@@ -56,7 +57,7 @@ const ImageUploader = () => {
     formData.append('file', selectedFile)
 
     try {
-      const response = await fetch('http://localhost:8000/process/image', {
+      const response = await fetch(`${API_BASE_URL}/process/image`, {
         method: 'POST',
         body: formData,
       })

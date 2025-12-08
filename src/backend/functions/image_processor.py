@@ -1,4 +1,4 @@
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModel, AutoTokenizer
 import torch
 import logging
 from typing import List, Optional, Any
@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 class ImageProcessor:
     """Encapsulates model, processor and image processing logic using dataclass"""
     
-    model_id: str = "LiquidAI/LFM2-VL-1.6B"
+    model_id: str = "OpenGVLab/InternVL3_5-1B"
     _model: Optional[Any] = field(default=None, init=False, repr=False)
     _processor: Optional[AutoProcessor] = field(default=None, init=False, repr=False)
+    _tokenizer: Optional[AutoTokenizer] = field(default=None, init=False, repr=False)
     _is_loaded: bool = field(default=False, init=False, repr=False)
     
     def __post_init__(self):
@@ -35,18 +36,31 @@ class ImageProcessor:
         self._model = value
         
     @property
-    def processor(self) -> AutoProcessor:
-        """Getter for the processor"""
+    def processor(self) -> Optional[AutoProcessor]:
+        """Getter for the processor - Note: InternVL3.5 doesn't use AutoProcessor"""
         if not self._is_loaded:
             self._load_model_and_processor()
-        if self._processor is None:
-            raise RuntimeError("Failed to load processor")
+        # InternVL3.5 uses direct model.chat() API, no processor needed
         return self._processor
     
     @processor.setter
     def processor(self, value: AutoProcessor):
         """Setter for the processor"""
         self._processor = value
+    
+    @property
+    def tokenizer(self) -> AutoTokenizer:
+        """Getter for the tokenizer"""
+        if not self._is_loaded:
+            self._load_model_and_processor()
+        if self._tokenizer is None:
+            raise RuntimeError("Failed to load tokenizer")
+        return self._tokenizer
+    
+    @tokenizer.setter
+    def tokenizer(self, value: AutoTokenizer):
+        """Setter for the tokenizer"""
+        self._tokenizer = value
     
     @property
     def is_loaded(self) -> bool:
@@ -58,17 +72,35 @@ class ImageProcessor:
         if self._is_loaded:
             return
             
-        self._model = AutoModelForImageTextToText.from_pretrained(
-            self.model_id,
-            device_map="cuda:0",
-            dtype=torch.bfloat16,
-            trust_remote_code=True
-        )
+        logger.info(f"Loading InternVL3.5 model: {self.model_id}")
         
-        self._processor = AutoProcessor.from_pretrained(
-            self.model_id, 
-            trust_remote_code=True
+        # Load tokenizer first for InternVL3.5
+        logger.info("Loading tokenizer...")
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self.model_id,
+            trust_remote_code=True,
+            use_fast=False
         )
+        logger.info(f"Tokenizer loaded successfully. Vocab size: {len(self._tokenizer)}")
+        
+        # Load the model
+        logger.info("Loading model (this may take a few minutes for first download)...")
+        self._model = AutoModel.from_pretrained(
+            self.model_id,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            use_flash_attn=False,  # Disabled due to CUDA compilation issues
+            trust_remote_code=True,
+            device_map="auto"
+        ).eval()
+        
+        logger.info(f"Model loaded successfully on device: {self._model.device if hasattr(self._model, 'device') else 'distributed'}")
+        logger.info(f"Model dtype: {next(self._model.parameters()).dtype}")
+        logger.info(f"Model memory footprint: {sum(p.numel() for p in self._model.parameters()) / 1e9:.2f}B parameters")
+        
+        # Note: We don't need AutoProcessor for InternVL3.5 as it uses direct model.chat() API
+        # Setting processor to None to avoid initialization issues
+        self._processor = None
         
         self._is_loaded = True
     
@@ -84,15 +116,15 @@ class ImageProcessor:
             logger.error(f"{error_msg}. Received: {num_images}")
             raise ValueError(error_msg)
     
-    def _ensure_models_loaded(self) -> tuple[Any, AutoProcessor]:
-        """Ensure model and processor are loaded and return them."""
+    def _ensure_models_loaded(self) -> tuple[Any, Optional[AutoProcessor]]:
+        """Ensure model is loaded and return it with processor (which may be None for InternVL3.5)."""
         try:
             model = self.model
             processor = self.processor
-            logger.info("Model and processor successfully accessed")
+            logger.info("Model successfully accessed")
             return model, processor
         except RuntimeError as e:
-            error_msg = f"Failed to load model or processor: {e}"
+            error_msg = f"Failed to load model: {e}"
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
         except Exception as e:
@@ -100,7 +132,7 @@ class ImageProcessor:
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
     
-    def _process_single_image(self, image_path: str, processor: AutoProcessor, model: Any, 
+    def _process_single_image(self, image_path: str, model: Any, 
                              image_index: int, total_images: int) -> bool:
         """
         Process a single image and return success status.
@@ -108,11 +140,19 @@ class ImageProcessor:
         Returns:
             bool: True if processing was successful, False otherwise.
         """
-        logger.debug(f"Processing image {image_index}/{total_images}: {image_path}")
+        logger.info(f"Starting processing of image {image_index}/{total_images}: {image_path}")
         
         try:
-            response = inference_on_images(image_path, processor, model)
-            logger.info(f"Image {image_index}/{total_images} processed successfully: {response}")
+            import time
+            start_time = time.time()
+            
+            response = inference_on_images(image_path, self.tokenizer, model)
+            
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            logger.info(f"Image {image_index}/{total_images} processed successfully in {processing_time:.2f}s")
+            logger.info(f"Response preview: {response[:100]}{'...' if len(response) > 100 else ''}")
             print(f"Image {image_index}/{total_images}: {response}")
             return True
             
@@ -182,7 +222,7 @@ class ImageProcessor:
         
         successful_count = 0
         for i in range(total_to_process):
-            if self._process_single_image(image_paths[i], processor, model, i + 1, total_to_process):
+            if self._process_single_image(image_paths[i], model, i + 1, total_to_process):
                 successful_count += 1
         
         # Handle results

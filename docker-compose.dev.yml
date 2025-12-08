@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Backend service
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile.dev
+    container_name: image-processor-backend-dev
+    ports:
+      # Bind to 127.0.0.1 on host for security (only accessible locally)
+      - "127.0.0.1:8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - ENV=development
+    volumes:
+      # Mount specific source directories for hot-reload (not the entire /app)
+      - ./src/backend/api:/app/api:rw
+      - ./src/backend/functions:/app/functions:rw
+      - ./src/backend/run_api.py:/app/run_api.py:rw
+      # Mount data folder for uploads
+      - ./data:/app/data
+      # Mount home directory for folder processing (read-only for security)
+      - ${HOME}:${HOME}:ro
+      # Mount /mnt for WSL Windows paths (if on WSL)
+      - /mnt:/mnt:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Frontend service
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    container_name: image-processor-frontend-dev
+    ports:
+      # Bind to 127.0.0.1 on host for security (only accessible locally)
+      - "127.0.0.1:3000:8080"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  app-data:
+    driver: local
