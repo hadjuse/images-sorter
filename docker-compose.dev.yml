@@ -14,8 +14,10 @@ services:
       - PYTHONPATH=/app
       - ENV=development
     volumes:
-      # Mount source code for hot-reload in development
-      - ./src/backend:/app:rw
+      # Mount specific source directories for hot-reload (not the entire /app)
+      - ./src/backend/api:/app/api:rw
+      - ./src/backend/functions:/app/functions:rw
+      - ./src/backend/run_api.py:/app/run_api.py:rw
       # Mount data folder for uploads
       - ./data:/app/data
       # Mount home directory for folder processing (read-only for security)

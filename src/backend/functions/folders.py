@@ -139,15 +139,7 @@ def inference_on_images_alternative(path: str, tokenizer, model) -> str:
         
         logging.info("Starting direct generation...")
         
-        # Use model.generate directly with timeout
-        import signal
-        
-        def timeout_handler(signum, frame):
-            raise TimeoutError("Generation timed out")
-        
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(60)  # 60 second timeout for alternative approach
-        
+        # Use model.generate directly
         try:
             with torch.no_grad():
                 outputs = model.generate(
@@ -156,7 +148,6 @@ def inference_on_images_alternative(path: str, tokenizer, model) -> str:
                     do_sample=False,
                     pad_token_id=tokenizer.eos_token_id
                 )
-            signal.alarm(0)
             
             # Decode response
             response = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -167,13 +158,7 @@ def inference_on_images_alternative(path: str, tokenizer, model) -> str:
             logging.info(f"Alternative inference completed: {response[:100]}...")
             return response
             
-        except TimeoutError:
-            signal.alarm(0)
-            logging.error("Alternative generation also timed out")
-            return "Error: Image processing timed out. Please try with a smaller image."
-            
         except Exception as e:
-            signal.alarm(0)
             logging.error(f"Alternative generation failed: {e}")
             return f"Error in alternative processing: {str(e)}"
         
@@ -217,30 +202,14 @@ def inference_on_images(path: str, tokenizer, model) -> str:
         )
         logging.info(f"Generation config: {generation_config}")
         
-        # Add timeout to prevent hanging
-        import signal
-        
-        def timeout_handler(signum, frame):
-            raise TimeoutError("Model inference timed out")
-        
-        # Set timeout for 120 seconds (CPU is slower)
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(120)
-        
-        try:
-            response = model.chat(
-                tokenizer, 
-                pixel_values, 
-                question, 
-                generation_config=generation_config
-            )
-            signal.alarm(0)  # Cancel timeout
-            logging.info("Model chat completed successfully")
-        except TimeoutError as e:
-            signal.alarm(0)  # Cancel timeout
-            logging.error("Model inference timed out - trying alternative approach")
-            # Try the alternative approach
-            return inference_on_images_alternative(path, tokenizer, model)
+        # Run inference without timeout constraints
+        response = model.chat(
+            tokenizer, 
+            pixel_values, 
+            question, 
+            generation_config=generation_config
+        )
+        logging.info("Model chat completed successfully")
         
         logging.info(f"Inference completed successfully. Response length: {len(response) if response else 0}")
         logging.debug(f"Full response: {response}")

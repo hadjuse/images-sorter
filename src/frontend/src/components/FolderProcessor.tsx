@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './FolderProcessor.css'
 import ImagePreview from './ImagePreview'
+import { API_BASE_URL } from '../config/api'
 
 interface FolderRequest {
   folder_path: string
@@ -59,7 +60,7 @@ const FolderProcessor = () => {
     setError(null)
 
     try {
-      const response = await fetch('http://localhost:8000/preview/folder', {
+      const response = await fetch(`${API_BASE_URL}/preview/folder`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ const FolderProcessor = () => {
     setResult(null)
 
     try {
-      const response = await fetch('http://localhost:8000/process/folder', {
+      const response = await fetch(`${API_BASE_URL}/process/folder`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -241,7 +242,7 @@ const FolderProcessor = () => {
                 <div className="result-content">
                   <div className="image-preview">
                     <img 
-                      src={`http://localhost:8000/image/${encodeURIComponent(item.image_path)}`}
+                      src={`${API_BASE_URL}/image/${encodeURIComponent(item.image_path)}`}
                       alt={item.image_path.split('/').pop()}
                       className="result-image"
                       onError={(e) => {

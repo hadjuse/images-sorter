@@ -58,7 +58,9 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        # Allow any origin for development (can restrict later)
+        "*"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -86,9 +88,13 @@ async def process_single_image(file: UploadFile = File(...)):
     if image_processor is None:
         raise HTTPException(status_code=503, detail="Image processor not initialized")
     
+    # Log file details for debugging
+    logger.info(f"Received file: filename={file.filename}, content_type={file.content_type}")
+    
     # Check file type
     if not file.content_type or not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File must be an image")
+        logger.error(f"Invalid content type: {file.content_type} for file {file.filename}")
+        raise HTTPException(status_code=400, detail=f"File must be an image (received: {file.content_type})")
     
     # Create temporary file
     temp_dir = None

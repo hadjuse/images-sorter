@@ -1,5 +1,6 @@
 import React from 'react'
 import './ImagePreview.css'
+import { API_BASE_URL } from '../config/api'
 
 interface ImagePreview {
   image_path: string
@@ -35,7 +36,7 @@ const ImagePreview: React.FC<ImagePreviewProps> = ({ previews, maxImages, onClea
         {previews.slice(0, 20).map((preview, index) => (
           <div key={index} className="preview-item">
             <img 
-              src={`http://localhost:8000/image/${encodeURIComponent(preview.image_path)}`}
+              src={`${API_BASE_URL}/image/${encodeURIComponent(preview.image_path)}`}
               alt={preview.filename}
               className="preview-thumbnail"
               onError={(e) => {
