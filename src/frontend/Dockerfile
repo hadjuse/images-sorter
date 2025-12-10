@@ -21,7 +21,8 @@ COPY package*.json ./
 
 # Installer les dépendances (avec cache optimisé)
 # NOTE: Must include devDependencies for build tools like typescript and vite
-RUN npm install --include=dev --silent
+# Use --legacy-peer-deps to handle React 19 compatibility issues
+RUN npm install --include=dev --legacy-peer-deps --silent
 
 # DEBUG: List what was installed
 RUN ls -la node_modules/.bin/ | head -20 || echo "No .bin folder"
