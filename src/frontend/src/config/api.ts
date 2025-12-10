@@ -10,6 +10,7 @@ console.log('API Configuration:', {
 
 export const API_ENDPOINTS = {
   PROCESS_IMAGE: `${API_BASE_URL}/process/image`,
+  PROCESS_IMAGE_STREAM: `${API_BASE_URL}/process/image/stream`,
   PROCESS_FOLDER: `${API_BASE_URL}/process/folder`,
   HEALTH: `${API_BASE_URL}/health`,
 } as const;
