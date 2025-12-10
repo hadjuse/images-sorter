@@ -1,0 +1,232 @@
+import React from 'react';
+import { renderWithProviders, screen, waitFor, fireEvent } from './test-utils';
+import { server } from './setupTests';
+import { http, HttpResponse } from 'msw';
+import ImageUploader from '../src/components/ImageUploader';
+import FolderProcessor from '../src/components/FolderProcessor';
+import ImagePreview from '../src/components/ImagePreview';
+import { API_BASE_URL } from '../src/config/api';
+
+describe('Frontend Components', () => {
+  describe('ImageUploader', () => {
+    it('renders without crashing', () => {
+      renderWithProviders(<ImageUploader />);
+      expect(screen.getByText(/Drop an image here or click to select/i)).toBeInTheDocument();
+    });
+
+    it('shows file preview when image is selected', async () => {
+      const file = new File(['test'], 'test.png', { type: 'image/png' });
+      renderWithProviders(<ImageUploader />);
+      
+      const input = screen.getByLabelText(/drop-zone/i) as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [file] } });
+      
+      await waitFor(() => {
+        expect(screen.getByText('test.png')).toBeInTheDocument();
+      });
+    });
+
+    it('handles image processing', async () => {
+      const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
+      renderWithProviders(<ImageUploader />);
+      
+      const input = screen.getByLabelText(/drop-zone/i) as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [file] } });
+      
+      const processButton = await screen.findByText(/Analyze Image/i);
+      fireEvent.click(processButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Analysis Result/i)).toBeInTheDocument();
+      });
+    });
+
+    it('handles processing errors', async () => {
+      server.use(
+        http.post(`${API_BASE_URL}/process/image`, () => {
+          return HttpResponse.json({ detail: 'Processing error' }, { status: 500 });
+        })
+      );
+      
+      const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
+      renderWithProviders(<ImageUploader />);
+      
+      const input = screen.getByLabelText(/drop-zone/i) as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [file] } });
+      
+      const processButton = await screen.findByText(/Analyze Image/i);
+      fireEvent.click(processButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Error/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('FolderProcessor', () => {
+    it('renders with default configuration', () => {
+      renderWithProviders(<FolderProcessor />);
+      expect(screen.getByDisplayValue('/mnt/c/Users/pc/Pictures/ted/')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('png')).toBeInTheDocument();
+    });
+
+    it('loads folder preview', async () => {
+      renderWithProviders(<FolderProcessor />);
+      
+      const previewButton = screen.getByText(/Preview Images/i);
+      fireEvent.click(previewButton);
+      
+      await waitFor(() => {
+        expect(screen.getAllByAltText(/test\d\.png/i)).toHaveLength(5);
+      });
+    });
+
+    it('handles folder processing', async () => {
+      renderWithProviders(<FolderProcessor />);
+      
+      const processButton = screen.getByText(/Process Folder/i);
+      fireEvent.click(processButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Processing Summary/i)).toBeInTheDocument();
+        expect(screen.getByText(/Found: 5/i)).toBeInTheDocument();
+      });
+    });
+
+    it('handles streaming mode', async () => {
+      renderWithProviders(<FolderProcessor />);
+      
+      const streamingToggle = screen.getByLabelText(/Streaming Mode/i);
+      fireEvent.click(streamingToggle);
+      
+      const processButton = screen.getByText(/Process Folder/i);
+      fireEvent.click(processButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Streaming Processing/i)).toBeInTheDocument();
+      });
+    });
+
+    it('handles preview errors', async () => {
+      server.use(
+        http.post(`${API_BASE_URL}/preview/folder`, () => {
+          return HttpResponse.json({ detail: 'Folder not found' }, { status: 404 });
+        })
+      );
+      
+      renderWithProviders(<FolderProcessor />);
+      
+      const previewButton = screen.getByText(/Preview Images/i);
+      fireEvent.click(previewButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Folder not found/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('ImagePreview', () => {
+    const mockPreviews = [
+      { image_path: '/test/image1.png', filename: 'image1.png' },
+      { image_path: '/test/image2.png', filename: 'image2.png' },
+    ];
+
+    it('renders image previews', () => {
+      renderWithProviders(
+        <ImagePreview 
+          previews={mockPreviews}
+          maxImages={5}
+          onClear={jest.fn()}
+        />
+      );
+      
+      expect(screen.getAllByRole('img')).toHaveLength(2);
+      expect(screen.getByText('image1.png')).toBeInTheDocument();
+    });
+
+    it('limits number of previews', () => {
+      const manyPreviews = Array(10).fill(0).map((_, i) => (
+        { image_path: `/test/image${i}.png`, filename: `image${i}.png` }
+      ));
+      
+      renderWithProviders(
+        <ImagePreview 
+          previews={manyPreviews}
+          maxImages={3}
+          onClear={jest.fn()}
+        />
+      );
+      
+      expect(screen.getAllByRole('img')).toHaveLength(3);
+    });
+
+    it('calls onClear when clear is clicked', () => {
+      const mockClear = jest.fn();
+      renderWithProviders(
+        <ImagePreview 
+          previews={mockPreviews}
+          maxImages={5}
+          onClear={mockClear}
+        />
+      );
+      
+      const clearButton = screen.getByText(/Clear/i);
+      fireEvent.click(clearButton);
+      
+      expect(mockClear).toHaveBeenCalled();
+    });
+  });
+
+  describe('API Integration', () => {
+    it('handles network errors gracefully', async () => {
+      server.use(
+        http.post(`${API_BASE_URL}/process/folder`, () => {
+          return HttpResponse.json({ detail: 'Internal server error' }, { status: 500 });
+        })
+      );
+      
+      renderWithProviders(<FolderProcessor />);
+      
+      const processButton = screen.getByText(/Process Folder/i);
+      fireEvent.click(processButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Error/i)).toBeInTheDocument();
+      });
+    });
+
+    it('shows loading states during processing', async () => {
+      // Slow down the response to test loading state
+      server.use(
+        http.post(`${API_BASE_URL}/process/folder`, async () => {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return HttpResponse.json({
+            folder_path: '/test',
+            extension: 'png',
+            total_found: 3,
+            processed: 3,
+            successful: 3,
+            failed: 0,
+            results: []
+          }, { status: 200 });
+        })
+      );
+      
+      renderWithProviders(<FolderProcessor />);
+      
+      const processButton = screen.getByText(/Process Folder/i);
+      fireEvent.click(processButton);
+      
+      expect(screen.getByText(/Processing.../i)).toBeInTheDocument();
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Processing Summary/i)).toBeInTheDocument();
+      });
+    });
+  });
+});
+
+function expect(arg0: any) {
+  
+  throw new Error('Function not implemented.');
+}
