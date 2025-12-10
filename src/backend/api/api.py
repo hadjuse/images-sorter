@@ -228,49 +228,31 @@ async def process_single_image_stream(file: UploadFile = File(...)):
             
             logger.info("File saved successfully, starting streaming inference...")
             
-            # Send start event
-            yield json.dumps({
-                "type": "start",
-                "filename": file.filename,
-                "message": "Starting image processing..."
-            }) + "\n"
+            # Send start event with SSE format
+            yield f"data: {json.dumps({'type': 'start', 'filename': file.filename, 'message': 'Starting image processing...'})}\n\n"
+            await asyncio.sleep(0)
             
             # Process the image
             model, processor = image_processor._ensure_models_loaded()
             
             # Send processing event
-            yield json.dumps({
-                "type": "processing",
-                "filename": file.filename,
-                "message": "Running inference on image..."
-            }) + "\n"
+            yield f"data: {json.dumps({'type': 'processing', 'filename': file.filename, 'message': 'Running inference on image...'})}\n\n"
+            await asyncio.sleep(0)
             
             response = inference_on_images(temp_file_path, image_processor.tokenizer, model)
             
             logger.info(f"Inference completed for {file.filename}")
             
             # Send result event
-            yield json.dumps({
-                "type": "result",
-                "filename": file.filename,
-                "status": "success",
-                "description": response
-            }) + "\n"
+            yield f"data: {json.dumps({'type': 'result', 'filename': file.filename, 'status': 'success', 'description': response})}\n\n"
+            await asyncio.sleep(0)
             
             # Send complete event
-            yield json.dumps({
-                "type": "complete",
-                "filename": file.filename,
-                "message": "Image processing completed successfully"
-            }) + "\n"
+            yield f"data: {json.dumps({'type': 'complete', 'filename': file.filename, 'message': 'Image processing completed successfully'})}\n\n"
             
         except Exception as e:
             logger.error(f"Error processing image in stream: {str(e)}")
-            yield json.dumps({
-                "type": "error",
-                "filename": file.filename,
-                "error": str(e)
-            }) + "\n"
+            yield f"data: {json.dumps({'type': 'error', 'filename': file.filename, 'error': str(e)})}\n\n"
         
         finally:
             # Clean up temporary files
@@ -378,24 +360,14 @@ async def process_folder_stream(
             image_paths = get_list_images(folder_path, extension)
             
             if not image_paths:
-                yield json.dumps({
-                    "type": "complete",
-                    "message": f"No {extension} images found in folder",
-                    "total_found": 0,
-                    "results": []
-                }) + "\n"
+                yield f"data: {json.dumps({'type': 'complete', 'message': f'No {extension} images found in folder', 'total_found': 0, 'results': []})}\n\n"
                 return
             
             # Send initial metadata
-            yield json.dumps({
-                "type": "metadata",
-                "folder_path": folder_path,
-                "extension": extension,
-                "total_found": len(image_paths),
-                "processed": 0,
-                "successful": 0,
-                "failed": 0
-            }) + "\n"
+            yield f"data: {json.dumps({'type': 'metadata', 'folder_path': folder_path, 'extension': extension, 'total_found': len(image_paths), 'processed': 0, 'successful': 0, 'failed': 0})}\n\n"
+            
+            # Ensure we flush the buffer
+            await asyncio.sleep(0)
             
             # Get model and processor
             model, processor = image_processor._ensure_models_loaded()
@@ -407,47 +379,29 @@ async def process_folder_stream(
             for i, image_path in enumerate(images_to_process):
                 try:
                     # Send start event for this image
-                    yield json.dumps({
-                        "type": "start",
-                        "image_path": image_path,
-                        "index": i + 1,
-                        "total": len(images_to_process)
-                    }) + "\n"
+                    yield f"data: {json.dumps({'type': 'start', 'image_path': image_path, 'index': i + 1, 'total': len(images_to_process)})}\n\n"
+                    await asyncio.sleep(0)
                     
                     # Process the image and stream the response
                     response = inference_on_images(image_path, image_processor.tokenizer, model)
                     
                     # Send the result
-                    yield json.dumps({
-                        "type": "result",
-                        "image_path": image_path,
-                        "status": "success",
-                        "description": response
-                    }) + "\n"
+                    yield f"data: {json.dumps({'type': 'result', 'image_path': image_path, 'status': 'success', 'description': response})}\n\n"
+                    await asyncio.sleep(0)
                     
                     successful += 1
                     
                 except Exception as e:
-                    yield json.dumps({
-                        "type": "result",
-                        "image_path": image_path,
-                        "status": "error",
-                        "error": str(e)
-                    }) + "\n"
+                    logger.error(f"Error processing image {image_path}: {str(e)}")
+                    yield f"data: {json.dumps({'type': 'result', 'image_path': image_path, 'status': 'error', 'error': str(e)})}\n\n"
+                    await asyncio.sleep(0)
             
             # Send final summary
-            yield json.dumps({
-                "type": "complete",
-                "processed": len(images_to_process),
-                "successful": successful,
-                "failed": len(images_to_process) - successful
-            }) + "\n"
+            yield f"data: {json.dumps({'type': 'complete', 'processed': len(images_to_process), 'successful': successful, 'failed': len(images_to_process) - successful})}\n\n"
             
         except Exception as e:
-            yield json.dumps({
-                "type": "error",
-                "error": str(e)
-            }) + "\n"
+            logger.error(f"Error in folder streaming: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
     
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
